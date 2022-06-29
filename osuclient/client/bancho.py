@@ -130,7 +130,7 @@ class BanchoClient:
 
     # Credentials
     user_id: int
-    username: str
+    username: Optional[str]
     allow_dms: bool
 
     # Bancho stuff
@@ -235,22 +235,31 @@ class BanchoClient:
 
     async def connect(
         self,
+        username: str,
         password: str, # TODO: Make an auth module such as `HWIDInfo`.
+        server: Optional[TargetServer] = None,
         passw_md5: bool = False,
     ) -> bool:
         """Attempts to connect to connect to the osu server specified, returning a bool
         of whether it has been successful.
         
         Args:
+            username (str): The username of the user.
             password (str): The password of the user.
+            server (TargetServer): The server to connect to. If not provided,
+                the object's server object will be used.
             passw_md5 (bool): Whether the password is MD5 hashed or not.
         """
+
+        self.server = server or self.server
 
         # Verify we are ready to start.
         assert self.server is not None, "You must set the server before connecting."
         assert self.version is not None, "You must set the version before connecting."
         assert self.hwid is not None, "You must set the hwid before connecting."
         assert self.http is not None, "You must set up the HTTP client before connecting."
+
+        self.username = username
 
         # Login uses password md5
         password_md5 = hashes.md5(password) if not passw_md5 else password
@@ -355,23 +364,21 @@ class BanchoClient:
     # Static Methods
     @staticmethod
     def new(
-        username: str,
         version: Optional[OsuVersion] = None,
         hwid: Optional[HWIDInfo] = None,
-        server: Optional[TargetServer] = None,
         allow_dms: bool = True,
     ) -> "BanchoClient":
         """Creates a new instance of `BanchoClient`."""
 
         client = BanchoClient(
             user_id=0,
-            username=username,
+            username=None,
             allow_dms=allow_dms,
             session=None,
             queue=bytearray(),
             protocol_version=0,
             privileges=constants.Privileges(0),
-            server=server,
+            server=None,
             version=version,
             hwid=hwid,
             online_presences=None,

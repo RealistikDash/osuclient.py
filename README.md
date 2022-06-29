@@ -23,12 +23,9 @@ loop = asyncio.get_event_loop()
 
 osu = bancho.OsuVersion(year= 2022, month= 6, day= 29)
 hwid = bancho.HWIDInfo.generate_random()
-server = bancho.TargetServer.from_base_url("server.example")
 client = bancho.BanchoClient.new(
-    username= "Username",
     version= osu,
     hwid= hwid,
-    server= server,
 )
 
 # Example custom packet handler.
@@ -38,7 +35,9 @@ async def on_notification(packet: rw.PacketReader) -> None:
 
 async def main():
     res = await client.connect(
-        "Password",
+        username= "Username",
+        password= "Password",
+        server= bancho.TargetServer.from_base_url("server.example"),
     )
 
     if not res:
