@@ -30,7 +30,7 @@ setup(
     python_requires=">=3.7",
 
     install_requires= parse_requirements(),
-    package_dir= {"": "reapi"},
+    package_dir= {"": "osuclient"},
 
     url= "https://github.com/RealistikDash/osuclient.py",
     project_urls= {
