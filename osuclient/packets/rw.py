@@ -1,6 +1,10 @@
 from . import constants
 import struct
 
+from typing import Union
+
+ByteLike = Union[bytes, bytearray]
+
 class PacketWriter:
     """A binary writer class specifically tailored for writing osu!bancho
     packets. Supports builder pattern."""
@@ -93,7 +97,7 @@ class PacketReader:
         """Returns whether the reader is empty."""
         return self._pos >= len(self._buf)
 
-    def __init__(self, buf: bytearray) -> None:
+    def __init__(self, buf: ByteLike) -> None:
         self._buf = buf
         self._pos = 0
 

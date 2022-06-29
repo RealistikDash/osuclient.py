@@ -10,10 +10,13 @@ import random
 
 from osuclient.packets.constants import PacketID
 from osuclient.utils import hashes
+from osuclient.packets.rw import (
+    PacketReader,
+    PacketWriter,
+    ByteLike,
+)
 from . import exceptions
 from . import constants
-
-ByteLike = Union[bytes, bytearray]
 
 @dataclass
 class BanchoSession:
@@ -145,7 +148,7 @@ class BanchoClient:
 
     # Packet Stuff
     send_timeout: int
-    packet_handlers: dict[PacketID, Callable[[bytes], Awaitable]]
+    packet_handlers: dict[PacketID, Callable[[PacketReader], Awaitable[None]]]
 
     # Private Methods
     def __setup_http(self) -> None:
@@ -158,8 +161,34 @@ class BanchoClient:
     def __setup_handlers(self) -> None:
         """Sets up the packet handlers"""
 
-        ...
+        self.packet_handlers |= {
+            PacketID.SRV_LOGIN_REPLY: self.__packet_login_reply,
+            PacketID.SRV_PROTOCOL_VERSION: self.__packet_protocol_ver,
+        }
+    async def __handle_response(self, response: bytes) -> None:
+        """Handles a response from the server."""
+
+        reader = PacketReader(response)
+        for packet_id, packet_len in reader:
+            packet_handler = self.packet_handlers.get(packet_id)
+            if not packet_handler:
+                reader.skip(packet_len)
+                continue
+            await packet_handler(reader)
     
+    # Packet Handlers
+    async def __packet_login_reply(self, reader: PacketReader) -> None:
+        """Handles the login reply packet."""
+
+        # The packet contains a userid or error code. We will handle errors
+        # later.
+        self.user_id = reader.read_i32()
+    
+    async def __packet_protocol_ver(self, reader: PacketReader) -> None:
+        """Updates the protocol version to correspond with the server's."""
+
+        self.protocol_version = reader.read_i32()
+
     # Properties
     @property
     def connected(self) -> bool:
@@ -181,6 +210,67 @@ class BanchoClient:
         """Sets the target server."""
         self.server = server
         return self
+
+    async def connect(
+        self,
+        password: str, # TODO: Make an auth module such as `HWIDInfo`.
+        passw_md5: bool = False,
+    ) -> bool:
+        """Attempts to connect to connect to the osu server specified, returning a bool
+        of whether it has been successful.
+        
+        Args:
+            password (str): The password of the user.
+            passw_md5 (bool): Whether the password is MD5 hashed or not.
+        """
+
+        # Verify we are ready to start.
+        assert self.server is not None, "You must set the server before connecting."
+        assert self.version is not None, "You must set the version before connecting."
+        assert self.hwid is not None, "You must set the hwid before connecting."
+        assert self.http is not None, "You must set up the HTTP client before connecting."
+
+        # Login uses password md5
+        password_md5 = hashes.md5(password) if not passw_md5 else password
+
+        # Form the response out of the details.
+        req_body = "\n".join([
+            self.username,
+            password_md5,
+            "|".join([
+                self.version.version,
+                str(self.hwid.utc_offset),
+                "0", # Display city (outdated)
+                ":".join([
+                    self.hwid.path_md5,
+                    self.hwid.adapters,
+                    self.hwid.adapters_md5,
+                    self.hwid.uninstall_md5,
+                    self.hwid.disk_md5,
+                ]),
+                "1" if self.allow_dms else "0",
+            ])
+        ])
+
+        # Send the request.
+        async with self.http.post(
+            self.server.bancho,
+            data=req_body.encode("utf-8"),
+        ) as response:
+            token = response.headers.get("cho-token")
+            if token == "no" or token is None:
+                return False
+            # Read the response.
+            response_body = await response.read()
+            await self.__handle_response(response_body)
+
+            # Create sesson if we succeeded.
+            if self.user_id > 0:
+                self.session = BanchoSession(token, self.server.bancho, self.http)
+            return self.connected
+
+    # async def get_latest_osu(self) -> None:
+    #    """Sets the osu client to the latest version on peppy's api."""
 
     # Static Methods
     @staticmethod
