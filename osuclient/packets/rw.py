@@ -71,6 +71,13 @@ class PacketWriter:
     
     def write_str(self, value: str) -> "PacketWriter":
         """Writes a string."""
+
+        # Exists byte.
+        if not value:
+            self.write_i8(0)
+            return self
+
+        self.write_i8(0xb)
         self.write_uleb128(len(value))
         self._buf.extend(value.encode())
         return self
@@ -169,6 +176,8 @@ class PacketReader:
 
     def read_str(self) -> str:
         """Reads a string."""
+        if self.read_i8() != 0xb:
+            return ""
         length = self.read_uleb128()
         string = self._buf[self._pos:self._pos + length].decode()
         self._pos += length

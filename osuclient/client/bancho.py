@@ -324,13 +324,33 @@ class BanchoClient:
         self.user_id = 0 # self.connected is now False
         self.session = None
     
-    async def run_forever(self) -> None:
+    async def wait_forever(self) -> None:
         """Waits until the client is disconnected."""
         assert self._loop_task is not None, "You must stuck the loop before running forever."
         await self._loop_task
+    
+    async def run_forever(self) -> None:
+        """Runs a connection loop and waits until a condition is met where
+        it finishes."""
+
+        # Start the loop.
+        self.start_loop()
+
+        # Wait until we are disconnected.
+        await self.wait_forever()
 
     # async def get_latest_osu(self) -> None:
     #    """Sets the osu client to the latest version on peppy's api."""
+
+    # Decorators
+    def on_packet(self, packet_id: PacketID) -> Callable:
+        """A decorator registering a specific function to a packet handler,
+        overriding the default handler."""
+        def decorator(func: Callable) -> Callable:
+            # TODO: maybe support multiple handlers per packet?
+            self._packet_handlers[packet_id] = func
+            return func
+        return decorator
 
     # Static Methods
     @staticmethod
