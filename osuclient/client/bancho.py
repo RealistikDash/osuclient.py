@@ -6,6 +6,7 @@ from typing import (
     Optional,
 )
 import aiohttp
+import asyncio
 import random
 
 from osuclient.packets.constants import PacketID
@@ -15,6 +16,7 @@ from osuclient.packets.rw import (
     PacketWriter,
     ByteLike,
 )
+from osuclient.packets import builders
 from . import exceptions
 from . import constants
 
@@ -148,7 +150,8 @@ class BanchoClient:
 
     # Packet Stuff
     send_timeout: int
-    packet_handlers: dict[PacketID, Callable[[PacketReader], Awaitable[None]]]
+    _packet_handlers: dict[PacketID, Callable[[PacketReader], Awaitable[None]]]
+    _loop_task: Optional[asyncio.Task]
 
     # Private Methods
     def __setup_http(self) -> None:
@@ -161,7 +164,7 @@ class BanchoClient:
     def __setup_handlers(self) -> None:
         """Sets up the packet handlers"""
 
-        self.packet_handlers |= {
+        self._packet_handlers |= {
             PacketID.SRV_LOGIN_REPLY: self.__packet_login_reply,
             PacketID.SRV_PROTOCOL_VERSION: self.__packet_protocol_ver,
         }
@@ -170,11 +173,20 @@ class BanchoClient:
 
         reader = PacketReader(response)
         for packet_id, packet_len in reader:
-            packet_handler = self.packet_handlers.get(packet_id)
+            packet_handler = self._packet_handlers.get(packet_id)
             if not packet_handler:
                 reader.skip(packet_len)
                 continue
             await packet_handler(reader)
+    
+    async def __ping_loop(self) -> None:
+        """A function meant to be ran as a task that sends the buffer at
+        regular intervals."""
+
+        while self.connected:
+            self.enqueue(builders.heartbeat())
+            await self.send()
+            await asyncio.sleep(self.send_timeout)
     
     # Packet Handlers
     async def __packet_login_reply(self, reader: PacketReader) -> None:
@@ -209,6 +221,16 @@ class BanchoClient:
     def set_server(self, server: TargetServer) -> "BanchoClient":
         """Sets the target server."""
         self.server = server
+        return self
+    
+    def set_http(self, http: aiohttp.ClientSession) -> "BanchoClient":
+        """Sets the aiohttp client session."""
+        self.http = http
+        return self
+    
+    def set_send_interval(self, interval: int) -> "BanchoClient":
+        """Sets the interval at which packets are sent (in seconds)."""
+        self.send_timeout = interval
         return self
 
     async def connect(
@@ -269,6 +291,44 @@ class BanchoClient:
                 self.session = BanchoSession(token, self.server.bancho, self.http)
             return self.connected
 
+    def enqueue(self, data: ByteLike) -> None:
+        """Manually enqueues a packet to be sent to the server."""
+        self.queue.extend(data)
+    
+    async def send(self) -> None:
+        """Sends the entire enqueued buffer to the server."""
+        assert self.session is not None, "You must be connected to send packets."
+
+        await self.session.send(self.queue)
+        self.queue.clear()
+    
+    def start_loop(self) -> asyncio.Task:
+        """Starts the ping loop on a new task."""
+        assert self.connected, "You must be connected to start the loop."
+        self.loop = asyncio.get_event_loop()
+        self._loop_task = self.loop.create_task(self.__ping_loop())
+        return self._loop_task
+    
+    async def logout(self) -> None:
+        """Logs the client out.
+        
+        Note:
+            Calling this method sends the remaining contents of the buffer
+            to the server.
+        """
+
+        assert self.connected, "You must be connected to logout."
+        self.enqueue(builders.logout())
+        await self.send()
+
+        self.user_id = 0 # self.connected is now False
+        self.session = None
+    
+    async def run_forever(self) -> None:
+        """Waits until the client is disconnected."""
+        assert self._loop_task is not None, "You must stuck the loop before running forever."
+        await self._loop_task
+
     # async def get_latest_osu(self) -> None:
     #    """Sets the osu client to the latest version on peppy's api."""
 
@@ -299,7 +359,8 @@ class BanchoClient:
             http=None,
 
             send_timeout= 5,
-            packet_handlers={},
+            _packet_handlers={},
+            _loop_task=None,
         )
 
         client.__setup_http()
