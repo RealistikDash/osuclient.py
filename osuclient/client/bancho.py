@@ -299,6 +299,26 @@ class BanchoClient:
             if self.user_id > 0:
                 self.session = BanchoSession(token, self.server.bancho, self.http)
             return self.connected
+    
+    async def connect_token(
+        self,
+        token: str,
+        username: str,
+        user_id: int,
+        server: Optional[TargetServer] = None,
+    ) -> None:
+        """Connects to an existing token."""
+
+        self.server = server or self.server
+
+        assert self.server is not None, "You must set the server before connecting."
+        assert self.http is not None, "You must set up the HTTP client before connecting."
+
+        self.user_id = user_id
+        self.username = username
+        self.session = BanchoSession(
+            token, self.server.bancho, self.http,
+        )
 
     def enqueue(self, data: ByteLike) -> None:
         """Manually enqueues a packet to be sent to the server."""
