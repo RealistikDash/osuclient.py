@@ -37,12 +37,14 @@ def send_message_packet(
 def send_private_message_packet(
     content: str,
     target: str,
+    sender_id: int
 ) -> bytes:
     return (
         PacketWriter()
             .write_str("")
             .write_str(content)
             .write_str(target)
+            .write_u32(sender_id)
             .finish(PacketID.OSU_SEND_PRIVATE_MESSAGE)
     )
 
