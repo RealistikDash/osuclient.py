@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
 from . import constants
 import struct
 
@@ -201,6 +204,13 @@ class PacketReader:
         packet_length = self.read_u32()
         return packet_id, packet_length
     
+    def remove_excess(self, packet_size: int) -> bytes:
+        """Removes the excess packet data from the buffer and returns it."""
+
+        excess = self._buf[self._pos + packet_size:]
+        self._buf = self._buf[:self._pos + packet_size]
+        return excess
+    
     def __iter__(self) -> "PacketReader":
         return self
     
@@ -208,3 +218,22 @@ class PacketReader:
         if self.empty:
             raise StopIteration
         return self.read_header()
+
+@dataclass
+class PacketContext:
+    id: constants.PacketID
+    length: int
+    reader: PacketReader
+
+    @staticmethod
+    def create_from_buffers(buf: ByteLike) -> list[PacketContext]:
+        """Creates a list of packet contexts from a buffer."""
+        reader = PacketReader(buf)
+        ctxs: list[PacketContext] = []
+
+        while not reader.empty:
+            packet_id, length = reader.read_header()
+            ctxs.append(PacketContext(packet_id, length, reader))
+            reader = PacketReader(reader.remove_excess(length))
+        
+        return ctxs

@@ -75,3 +75,57 @@ def set_action(
             .write_i32(beatmap_id)
             .finish(PacketID.OSU_CHANGE_ACTION)
     )
+
+def join_match(
+    match_id: int,
+    password: str,
+) -> bytes:
+    return (
+        PacketWriter()
+            .write_i32(match_id)
+            .write_str(password)
+            .finish(PacketID.OSU_JOIN_MATCH)
+    )
+
+def match_ready() -> bytes:
+    return (
+        PacketWriter()
+            .finish(PacketID.OSU_MATCH_READY)
+    )
+
+def match_loaded() -> bytes:
+    return (
+        PacketWriter()
+            .finish(PacketID.OSU_MATCH_LOAD_COMPLETE)
+    )
+
+def match_not_ready() -> bytes:
+    return (
+        PacketWriter()
+            .finish(PacketID.OSU_MATCH_UNREADY)
+    )
+
+def match_skip_req() -> bytes:
+    return (
+        PacketWriter()
+            .finish(PacketID.OSU_MATCH_SKIP_REQUEST)
+    )
+
+def match_player_finished_map() -> bytes:
+    return (
+        PacketWriter()
+            .finish(PacketID.OSU_MATCH_COMPLETE)
+    )
+
+def match_leave() -> bytes:
+    return (
+        PacketWriter()
+            .finish(PacketID.OSU_PART_MATCH)
+    )
+
+def match_invite(user_id: int) -> bytes:
+    return (
+        PacketWriter()
+            .write_i32(user_id)
+            .finish(PacketID.OSU_MATCH_INVITE)
+    )

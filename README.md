@@ -1,6 +1,8 @@
 # osuclient.py
 osuclient.py aims to allow the emulation of the communication between an osu client and server through code.
 
+It is now also available on [PyPi](https://pypi.org/project/osuclient/)
+
 ## Note
 Please make sure this is only used on servers which you have explicit permission to do so.
 Using this without permission may result in restrictions and bans as it is likely to break the rules there.
@@ -30,8 +32,8 @@ client = bancho.BanchoClient.new(
 
 # Example custom packet handler.
 @client.on_packet(constants.PacketID.SRV_NOTIFICATION)
-async def on_notification(packet: rw.PacketReader) -> None:
-    print(f"Notification> {packet.read_str()}")
+async def on_notification(packet: rw.PacketContext) -> None:
+    print(f"Notification> {packet.reader.read_str()}")
 
 async def main():
     res = await client.connect(

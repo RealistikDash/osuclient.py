@@ -1,25 +1,17 @@
-from setuptools import setup
-
-def parse_requirements() -> list[str]:
-    with open("requirements.txt") as f:
-        lines = f.readlines()
-
-    return [
-        line for line in lines
-        if line and not line.startswith("#")
-    ]
+import setuptools
 
 def read_readme() -> str:
     with open("README.md") as f:
         return f.read()
 
-setup(
-    name= "osuserver.py",
-    version= "0.1.0",
-    description= "A simple library for programmatic interfacing with osu servers. ",
+setuptools.setup(
+    name= "osuclient",
+    version= "0.2.0",
+    description= "A simple library for programmatic interfacing with osu servers.",
     license= "MIT",
     classifiers= [
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.8",
@@ -29,8 +21,10 @@ setup(
     ],
     python_requires=">=3.7",
 
-    install_requires= parse_requirements(),
-    package_dir= {"": "osuclient"},
+    install_requires= [
+        "aiohttp",
+    ],
+    packages=setuptools.find_packages(),
 
     url= "https://github.com/RealistikDash/osuclient.py",
     project_urls= {

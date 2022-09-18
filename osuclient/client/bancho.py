@@ -1,8 +1,8 @@
 from dataclasses import dataclass
+from dataclasses import field
 from typing import (
     Awaitable,
     Callable,
-    Union,
     Optional,
 )
 import aiohttp
@@ -12,13 +12,13 @@ import random
 from osuclient.packets.constants import PacketID
 from osuclient.utils import hashes
 from osuclient.packets.rw import (
-    PacketReader,
-    PacketWriter,
+    PacketContext,
     ByteLike,
 )
 from osuclient.packets import builders
 from . import exceptions
 from . import constants
+from .player_state import PlayerPresence
 
 @dataclass
 class BanchoSession:
@@ -125,6 +125,39 @@ class HWIDInfo:
         )
 
 @dataclass
+class ServerState:
+    """A class representing the known state of the server."""
+
+    presences: list[PlayerPresence] = field(default_factory=list)
+
+    def __len__(self) -> int:
+        return len(self.presences)
+
+    @property
+    def player_count(self) -> int:
+        """Returns the number of players currently online."""
+        return len(self.presences)
+
+    def add_presence(self, presence: PlayerPresence) -> None:
+        """Adds a presence to the server state."""
+
+        # Check if its in
+        for i, p in enumerate(self.presences):
+            if p.id == presence.id:
+                return
+        self.presences.append(presence)
+    
+    def remove_presence(self, user_id: int) -> bool:
+        """Removes a presence from the server state, returning a bool of
+        whether it was successful."""
+
+        for p in self.presences:
+            if p.id == user_id:
+                self.presences.remove(p)
+                return True
+        return False
+
+@dataclass
 class BanchoClient:
     """A class representing an instance of an osu client."""
 
@@ -143,14 +176,13 @@ class BanchoClient:
     hwid: Optional[HWIDInfo]
 
     # Server State
-    online_presences: ...
-    online_stats: ...
+    server_state: ServerState
 
     http: Optional[aiohttp.ClientSession]
 
     # Packet Stuff
     send_timeout: int
-    _packet_handlers: dict[PacketID, Callable[[PacketReader], Awaitable[None]]]
+    _packet_handlers: dict[PacketID, Callable[[PacketContext], Awaitable[None]]]
     _loop_task: Optional[asyncio.Task]
 
     # Private Methods
@@ -167,17 +199,18 @@ class BanchoClient:
         self._packet_handlers |= {
             PacketID.SRV_LOGIN_REPLY: self.__packet_login_reply,
             PacketID.SRV_PROTOCOL_VERSION: self.__packet_protocol_ver,
+            PacketID.SRV_USER_PRESENCE: self.__packet_user_presence,
+            PacketID.SRV_USER_LOGOUT: self.__packet_user_logout,
         }
     async def __handle_response(self, response: bytes) -> None:
         """Handles a response from the server."""
 
-        reader = PacketReader(response)
-        for packet_id, packet_len in reader:
-            packet_handler = self._packet_handlers.get(packet_id)
+        ctxs = PacketContext.create_from_buffers(response)
+        for ctx in ctxs:
+            packet_handler = self._packet_handlers.get(ctx.id)
             if not packet_handler:
-                reader.skip(packet_len)
                 continue
-            await packet_handler(reader)
+            await packet_handler(ctx)
     
     async def __ping_loop(self) -> None:
         """A function meant to be ran as a task that sends the buffer at
@@ -189,17 +222,29 @@ class BanchoClient:
             await asyncio.sleep(self.send_timeout)
     
     # Packet Handlers
-    async def __packet_login_reply(self, reader: PacketReader) -> None:
+    async def __packet_login_reply(self, ctx: PacketContext) -> None:
         """Handles the login reply packet."""
 
         # The packet contains a userid or error code. We will handle errors
         # later.
-        self.user_id = reader.read_i32()
+        self.user_id = ctx.reader.read_i32()
     
-    async def __packet_protocol_ver(self, reader: PacketReader) -> None:
+    async def __packet_protocol_ver(self, ctx: PacketContext) -> None:
         """Updates the protocol version to correspond with the server's."""
 
-        self.protocol_version = reader.read_i32()
+        self.protocol_version = ctx.reader.read_i32()
+
+    async def __packet_user_presence(self, ctx: PacketContext) -> None:
+        """Handles the user presence packet."""
+
+        presence = PlayerPresence.from_reader(ctx.reader)
+        self.server_state.add_presence(presence)
+    
+    async def __packet_user_logout(self, ctx: PacketContext) -> None:
+        """Handles the user logout packet."""
+
+        user_id = ctx.reader.read_i32()
+        self.server_state.remove_presence(user_id)
 
     # Properties
     @property
@@ -328,7 +373,8 @@ class BanchoClient:
         """Sends the entire enqueued buffer to the server."""
         assert self.session is not None, "You must be connected to send packets."
 
-        await self.session.send(self.queue)
+        resp = await self.session.send(self.queue)
+        await self.__handle_response(resp)
         self.queue.clear()
     
     def start_loop(self) -> asyncio.Task:
@@ -401,8 +447,7 @@ class BanchoClient:
             server=None,
             version=version,
             hwid=hwid,
-            online_presences=None,
-            online_stats=None,
+            server_state=ServerState(),
             http=None,
 
             send_timeout= 5,
