@@ -43,6 +43,7 @@ def send_private_message_packet(
             .write_str("")
             .write_str(content)
             .write_str(target)
+            .write_u32(0)
             .finish(PacketID.OSU_SEND_PRIVATE_MESSAGE)
     )
 
