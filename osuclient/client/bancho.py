@@ -384,12 +384,15 @@ class BanchoClient:
         self._loop_task = self.loop.create_task(self.__ping_loop())
         return self._loop_task
     
-    async def logout(self) -> None:
+    async def logout(self, close_http: bool = False) -> None:
         """Logs the client out.
         
         Note:
             Calling this method sends the remaining contents of the buffer
             to the server.
+
+        Args:
+            close_http (bool): Whether to close the HTTP session on logout.
         """
 
         assert self.connected, "You must be connected to logout."
@@ -398,6 +401,10 @@ class BanchoClient:
 
         self.user_id = 0 # self.connected is now False
         self.session = None
+
+        if close_http and self.http is not None:
+            await self.http.close()
+            self.http = None
     
     async def wait_forever(self) -> None:
         """Waits until the client is disconnected."""

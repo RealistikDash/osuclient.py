@@ -6,7 +6,7 @@ def read_readme() -> str:
 
 setuptools.setup(
     name= "osuclient",
-    version= "0.2.0",
+    version= "0.2.1",
     description= "A simple library for programmatic interfacing with osu servers.",
     license= "MIT",
     classifiers= [

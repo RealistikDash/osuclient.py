@@ -129,3 +129,9 @@ def match_invite(user_id: int) -> bytes:
             .write_i32(user_id)
             .finish(PacketID.OSU_MATCH_INVITE)
     )
+
+def match_start() -> bytes:
+    return (
+        PacketWriter()
+            .finish(PacketID.OSU_MATCH_START)
+    )
